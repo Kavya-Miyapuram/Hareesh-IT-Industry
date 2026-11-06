@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cricket and Kabaddi Registrations – Hareesh IT Industry</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a class="admin-btn" href="/admin.html">Admin Login</a>
+  <h1>Hareesh IT Industry</h1>
+  <p>Cricket and Kabaddi Registrations</p>
+</header>
+<main>
+  <div class="card">
+    <form id="form">
+
+      <div id="step1">
+        <div class="notice">
+          <b>Only the team captain should register</b> on behalf of the team.<br>
+          Registration fee per team: <span id="feeList">...</span>
+        </div>
+
+        <label for="sport">Sport</label>
+        <select id="sport" name="sport" required>
+          <option value="" disabled selected>Select sport</option>
+          <option value="cricket">Cricket</option>
+          <option value="kabaddi">Kabaddi</option>
+        </select>
+
+        <label for="captain">Captain Name</label>
+        <input id="captain" name="captain" required maxlength="80" placeholder="Captain's full name">
+
+        <label for="contact">Captain Contact</label>
+        <input id="contact" name="contact" required pattern="[6-9][0-9]{9}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile number">
+
+        <label for="email">Captain Email</label>
+        <input id="email" name="email" type="email" required placeholder="you@example.com">
+
+        <label for="college">College Name</label>
+        <input id="college" name="college" required maxlength="120" placeholder="Your college">
+
+        <label for="year">Captain's Engineering Year</label>
+        <select id="year" name="year" required>
+          <option value="" disabled selected>Select year</option>
+          <option value="1">1st Year</option>
+          <option value="2">2nd Year</option>
+          <option value="3">3rd Year</option>
+          <option value="4">4th Year</option>
+        </select>
+
+        <label class="check"><input type="checkbox" id="isCaptain" name="isCaptain" required> I confirm that I am the captain of this team.</label>
+
+        <div class="fee">Registration fee: <b id="fee">Select a sport</b></div>
+        <button id="next" type="button">Next: Payment</button>
+      </div>
+
+      <div id="step2" class="hidden">
+        <div class="paybox">
+          <div class="paybox-title">Payment Details</div>
+          <div class="paybox-row"><span>Sport</span><b id="sSport"></b></div>
+          <div class="paybox-row"><span>Registration fee</span><b id="amt"></b></div>
+          <div class="paybox-row">
+            <span>Pay to mobile number</span>
+            <span class="num"><b id="payNumber"></b><button id="copy" type="button" class="ghost">Copy</button></span>
+          </div>
+          <div class="paybox-note">Accepted on PhonePe, Google Pay, Paytm and any UPI app.</div>
+        </div>
+
+        <ol class="steps">
+          <li>Open any UPI app and choose &ldquo;Pay to contact / mobile number&rdquo;.</li>
+          <li>Enter the number above and pay the exact registration fee.</li>
+          <li>Enter the transaction ID (UTR) from your payment receipt below and submit.</li>
+        </ol>
+
+        <label for="utr">UPI Transaction ID / UTR</label>
+        <input id="utr" name="utr" maxlength="25" pattern="[A-Za-z0-9]{10,25}" placeholder="e.g. 412345678901">
+        <div class="hint">Shown in your payment app after paying (usually 12 digits).</div>
+
+        <button id="submit" type="submit">Submit Registration</button>
+        <button id="back" type="button" class="link" style="margin-top:12px">&larr; Back to details</button>
+      </div>
+
+      <div id="msg" class="msg"></div>
+    </form>
+  </div>
+</main>
+<footer class="foot">
+  For accommodation and food enquiries, contact <a href="tel:8297297632">8297297632</a>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+const money = n => '\u20B9' + Number(n).toLocaleString('en-IN');
+const label = s => s.charAt(0).toUpperCase() + s.slice(1);
+let info = null;
+
+function updateFee() {
+  const s = $('sport').value;
+  $('fee').textContent = (s && info) ? money(info.fees[s]) : 'Select a sport';
+}
+
+fetch('/api/payment-info').then(r => r.json()).then(i => {
+  if (i.error) throw new Error(i.error);
+  info = i;
+  $('feeList').textContent = Object.keys(i.fees).map(k => label(k) + ' ' + money(i.fees[k])).join('  \u00B7  ');
+  $('payNumber').textContent = i.payNumber;
+  updateFee();
+}).catch(err => { $('msg').textContent = err.message; });
+
+$('sport').addEventListener('change', updateFee);
+
+$('next').addEventListener('click', () => {
+  const fields = [...$('step1').querySelectorAll('input, select')];
+  if (!fields.every(f => f.reportValidity())) return;
+  if (!info) { $('msg').textContent = 'Payment details are not available right now. Please try again later.'; return; }
+  const sport = $('sport').value;
+  $('sSport').textContent = label(sport);
+  $('amt').textContent = money(info.fees[sport]);
+  $('msg').textContent = '';
+  $('step1').classList.add('hidden');
+  $('step2').classList.remove('hidden');
+  $('utr').required = true;
+  window.scrollTo(0, 0);
+});
+
+$('back').addEventListener('click', () => {
+  $('msg').textContent = '';
+  $('step2').classList.add('hidden');
+  $('step1').classList.remove('hidden');
+  $('utr').required = false;
+});
+
+$('copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(info.payNumber); $('copy').textContent = 'Copied'; }
+  catch { $('copy').textContent = 'Select & copy'; }
+  setTimeout(() => { $('copy').textContent = 'Copy'; }, 1800);
+});
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('submit');
+  btn.disabled = true; $('msg').textContent = '';
+  const body = Object.fromEntries(new FormData(e.target));
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+    window.location.href = '/success.html?ref=' + encodeURIComponent(body.utr.trim().toUpperCase());
+  } catch (err) {
+    $('msg').textContent = err.message;
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
